@@ -144,13 +144,23 @@ dress: Duo the owl, the Feather Bold typeface, the logo. So the mascot here is
 around the same chunky, saturated, hard-bottom-edge language without lifting
 Duolingo's exact hex values.
 
-## Icons
+## Icon and mascot
 
-Ace is drawn as inline SVG and rasterised to PNG for the places that need it:
-`apple-touch-icon.png` (180px, opaque — iOS paints black behind transparency),
-`icon-192/512.png` for the web manifest, and a 32px favicon. The maskable icon
-keeps him inside the central 80% safe circle so Android's crop never clips him;
-the tab favicon uses a tighter crop, since 16px leaves no room for margins.
+Two different marks, doing two different jobs.
+
+**Ace**, the pencil, is the in-app mascot — he appears in onboarding, on the
+recap, and when you run out of hearts. He is inline SVG in
+`src/components/Mascot.tsx` with five expressions.
+
+**The app icon** is the ascent mark: a rising chart stroke that breaks into a
+rhombus, climbs to an arrowhead, and crosses a solid summit. It is generated
+from a single 100×100 definition and rasterised to PNG for the places that need
+it: `apple-touch-icon.png` (180px, fully opaque — iOS paints black behind any
+transparency), `icon-192/512.png` for the web manifest, and a 32px favicon.
+
+The maskable icon keeps the mark inside the central 80% safe circle so Android's
+crop can't clip it; the tab favicon fills more of the frame, since 16px leaves no
+room for margins.
 
 ## Structure
 
