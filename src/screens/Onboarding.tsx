@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Mascot } from '../components/Mascot'
 import { Btn, Bar } from '../components/ui'
-import { DAILY_GOALS, TIMEFRAMES, buildPlan, lessonCountFor } from '../engine/planner'
+import { DAILY_GOALS, TIMEFRAMES, buildPlan, lessonCountFor, planQuestionCount } from '../engine/planner'
 import type { Timeframe } from '../engine/planner'
 import { startPlan } from '../store/store'
 
@@ -114,7 +114,7 @@ export const Onboarding = () => {
             <div className="flex flex-col gap-3">
               {TIMEFRAMES.map((t) => (
                 <Choice key={t.id} selected={timeframe === t.id} onClick={() => setTimeframe(t.id)}>
-                  <span className="keycap">{t.weeks}w</span>
+                  <span className="keycap">{t.days}d</span>
                   <span className="flex-1">{t.label}</span>
                 </Choice>
               ))}
@@ -141,7 +141,8 @@ export const Onboarding = () => {
             </div>
             {timeframe && dailyMinutes && (
               <p className="mt-4 text-center text-[13px] font-bold text-hare">
-                That's about {lessonCountFor(timeframe, dailyMinutes)} lessons.
+                That's {lessonCountFor(timeframe, dailyMinutes)} lessons —{' '}
+                {lessonCountFor(timeframe, dailyMinutes) * 12} questions, none repeated.
               </p>
             )}
           </>
@@ -196,11 +197,11 @@ export const Onboarding = () => {
                   `${preview.rw.reduce((n, u) => n + u.lessons.length, 0)} lessons`,
                 ],
                 ['Math', `${preview.math.reduce((n, u) => n + u.lessons.length, 0)} lessons`],
+                ['Questions', `${planQuestionCount(preview)}, none repeated`],
                 [
                   'Estimated time',
                   `${Math.floor(preview.estimatedMinutes / 60)}h ${preview.estimatedMinutes % 60}m total`,
                 ],
-                ['Per lesson', '12 questions, adaptive'],
               ].map(([k, v]) => (
                 <div key={k} className="flex items-center justify-between px-4 py-3">
                   <span className="text-[15px] font-bold text-wolf">{k}</span>
@@ -208,9 +209,17 @@ export const Onboarding = () => {
                 </div>
               ))}
             </div>
+            {preview.cappedByBank && (
+              <p className="mt-3 rounded-2xl bg-bee-tint px-4 py-3 text-[13px] font-bold leading-snug text-[#8a6d00]">
+                That's {preview.totalLessons} lessons rather than {preview.requestedLessons} — the
+                bank holds enough for this many without ever repeating a question. You can add more
+                in Settings.
+              </p>
+            )}
+
             <p className="mt-4 text-center text-[13px] font-bold text-hare">
-              Reading &amp; Writing and Math are separate trails, so you can spend a day on
-              either one. Every lesson splits into two modules — do well on the first and the
+              That's one lesson a day. Reading &amp; Writing and Math are separate trails, so you can spend a
+              day on either. Every lesson splits into two modules — do well on the first and the
               second gets harder, exactly how the real digital SAT works.
             </p>
           </>

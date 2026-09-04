@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "node tests/bank.test.mjs && node --experimental-strip-types --no-warnings --import ./tests/register.mjs tests/planner.test.mjs && node --experimental-strip-types --no-warnings --import ./tests/register.mjs tests/extend.test.mjs && node --experimental-strip-types --no-warnings --import ./tests/register.mjs tests/grading.test.mjs && node --experimental-strip-types --no-warnings --import ./tests/register.mjs tests/streak.test.mjs"
+    "test": "node --experimental-strip-types --no-warnings --import ./tests/register.mjs tests/bank.test.mjs && node --experimental-strip-types --no-warnings --import ./tests/register.mjs tests/planner.test.mjs && node --experimental-strip-types --no-warnings --import ./tests/register.mjs tests/norepeat.test.mjs && node --experimental-strip-types --no-warnings --import ./tests/register.mjs tests/extend.test.mjs && node --experimental-strip-types --no-warnings --import ./tests/register.mjs tests/grading.test.mjs && node --experimental-strip-types --no-warnings --import ./tests/register.mjs tests/streak.test.mjs"
   },
   "dependencies": {
     "react": "^19.2.0",

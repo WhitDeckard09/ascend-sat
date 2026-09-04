@@ -47,7 +47,9 @@ finishable.
 ## The parts worth knowing about
 
 **`src/engine/planner.ts` — plan generation.** Available time sets the lesson
-count (`weeks × 5 days × daily minutes ÷ 11 min per lesson`, clamped to 12–90).
+count at **one lesson a day** (two a day at the most intensive setting), so 30
+days is 30 lessons and 360 questions. Sizing it from a minutes budget instead
+produced a 12-lesson plan for a whole month.
 The goal score sets *which* domains get the surplus: at 1150 the plan front-loads
 grammar and linear algebra, where the fastest points are; at 1550 it shifts to
 Craft & Structure and Advanced Math, where the hardest questions live.
@@ -58,6 +60,13 @@ there are. The two sections are apportioned *separately*, each getting half the
 budget — doing it in one pass over all eight domains let rounding drift the split
 (27 lessons came out 15/12 because every remainder fell to R&W). Within a trail,
 domains rotate so you never get eight grammar lessons in a row.
+
+A plan is also capped at what the bank can actually serve. `trailCapacity` runs
+the real allocator against the real question counts — not raw blueprint weights,
+since apportionment has a one-lesson floor per domain and largest-remainder
+rounding — and reserves one lesson per domain to absorb unit reviews, which draw
+across every domain in their unit. When a timeframe asks for more than that, the
+plan says so on the summary screen rather than quietly recycling questions.
 
 **`src/engine/rating.ts` — skill tracking.** Each of the 8 domains carries a
 0–100 rating updated per question with an Elo rule. Getting an easy question
@@ -85,54 +94,39 @@ year, month rollover) are actually tested.
 
 ## The question bank
 
-258 hand-written questions in `src/data/questions/`, tagged by domain, sub-skill,
-and difficulty. Every one has a worked explanation, and most have a `trap` note
-naming why the most seductive wrong answer is wrong — that note is what shows up
-in the recap.
+**1,358 questions.** Enough that a 60-day plan — 60 lessons, 720 questions —
+never serves the same question twice. `tests/norepeat.test.mjs` proves this by
+driving the real selection engine through every plan the app can build, for both
+a struggling student (who routes down into easy questions) and a strong one (who
+routes up into hard ones), since the two exhaust different pools.
 
-Coverage per domain: 36 / 36 / 36 / 30 for the four R&W domains, 36 / 36 / 24 /
-24 for Math, split evenly across easy/medium/hard. Minimum pool for any
-domain-difficulty pair is 8, which is enough that a single lesson never repeats.
+|  | Reading & Writing | Math |
+|---|---|---|
+| Questions | 458 | 900 |
+| Source | hand-written | 120 hand-written, 780 generated |
 
-`npm test` checks the bank structurally: no duplicate ids, exactly 4 choices per
-multiple-choice question, valid answer indices, grid-ins with accepted-answer
-lists, and no leftover drafting text. It also builds all 260 possible plans and
-asserts the two trails stay within one lesson of each other, contain only their
-own section's domains, and never share a lesson id.
+**Reading & Writing is hand-written**, in `src/data/questions/rw-*.ts`. Passages
+have to be composed; there is no templating a Craft & Structure question. Every
+item carries a worked explanation, and most carry a `trap` note naming why the
+most seductive wrong answer is wrong — that note is what surfaces in the recap.
 
-## The two trails
+**Math is mostly generated**, from ~60 parameterised templates in
+`src/data/generate/`. Each template computes its own answer, so the arithmetic
+cannot be wrong the way a hand-written item's can — and the distractors are built
+from real error patterns (forgetting to flip an inequality when dividing by a
+negative, treating a fractional exponent as multiplication, using the new value
+as the base of a percent change). The 120 hand-written math questions remain
+alongside them.
 
-A segmented toggle at the top of the Learn tab switches between them — book for
-Reading & Writing, radical for Math — and shows how far along each one you are.
-The choice persists across reloads. Each trail has its own palette (blue/purple
-for R&W, green/orange for Math) so the two feel distinct, and lesson ids are
-namespaced per trail (`rw-u0-l0`, `math-u0-l0`) so completion never collides.
+Generation is seeded and deterministic: a template key plus an index always
+produces the same question. That matters because the app persists which question
+ids a student has seen, so a bank that reshuffled itself between builds would
+silently break repeat-avoidance.
 
-Gold is deliberately absent from unit banners: white text on `#FFC800` is
-unreadable.
-
-## Adding more lessons
-
-**Settings → Add more lessons** has a stepper per trail: pick how many Reading &
-Writing and how many Math lessons to append, up to 20 of each at a time and 250
-in the plan overall.
-
-New lessons fill any partial final unit before opening a new one, and a unit that
-reaches five gains a review as its last step — the same rule the initial build
-follows. Which domains they cover is decided by *deficit*: each new lesson goes to
-whichever domain is furthest below its blueprint share of that trail so far, so a
-trail stays proportionally correct no matter how many times it is extended.
-
-Extending never renumbers or reorders an existing lesson, because completion is
-keyed by lesson id — `tests/extend.test.mjs` asserts that explicitly, along with
-id uniqueness, the unit-filling rules, and that the input plan is not mutated.
-
-## Onboarding
-
-Three questions: name, how long you have, and a goal score set with a slider —
-1000 to 1600 in steps of 50. It's a native `<input type="range">` under the
-chunky styling, so arrow keys, touch drag, and screen readers all work; the value
-snaps to the step and clamps at both ends.
+`npm test` validates the whole bank structurally — no duplicate ids, exactly four
+distinct choices per multiple-choice question, valid answer indices, grid-ins
+with accepted-answer lists, skills that actually belong to their domain, and at
+least four questions at every domain/difficulty pair.
 
 ## On the Duolingo resemblance
 
@@ -235,19 +229,24 @@ room for margins.
 
 ```
 src/
-  data/         types.ts (SAT taxonomy) · bank.ts (index) · questions/ (8 files)
+  data/         types.ts (SAT taxonomy) · bank.ts (index)
+                questions/  hand-written items
+                generate/   parameterised math templates
   engine/       planner · rating · selection · answers (grading) · streak · sound
   store/        store.ts — state, localStorage, hearts, XP
   screens/      Onboarding · Path · Lesson · Recap · Stats · Review · Settings
   components/   Mascot · TopBar · QuestionBody · ui · icons
-tests/          bank · planner · extend · grading · streak
+tests/          bank · planner · norepeat · extend · grading · streak
 ```
 
 ## Known limits
 
-- **Finite bank.** 258 questions is enough for a 40-lesson plan without heavy
-  repeats, but a 90-lesson plan will revisit questions. Selection handles this
-  gracefully (least-recently-seen first) rather than breaking.
+- **The bank is finite.** 1,358 questions covers 60 days at a lesson a day with
+  nothing repeated. A 90-day plan caps at 75 lessons rather than 90, and says so
+  during onboarding. Settings → Add more lessons can push past it, at which point
+  selection begins reusing least-recently-seen questions.
+- **The bundle is 218 kB gzipped,** most of it the question bank, which loads up
+  front. Splitting it per domain would help if that ever matters.
 - **No figures.** Geometry questions are worded to avoid needing a diagram, and
   data questions use tables rather than scatterplots.
 - **The projected score is an estimate,** calibrated to feel directionally right,

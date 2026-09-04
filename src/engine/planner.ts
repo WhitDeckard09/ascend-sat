@@ -1,25 +1,27 @@
 import type { Domain, Section } from '../data/types'
-import { DOMAINS, DOMAIN_BY_ID } from '../data/types'
+import { DOMAINS, DOMAIN_BY_ID, QUESTIONS_PER_LESSON } from '../data/types'
+import { questionCounts } from '../data/bank'
 
 /**
  * Turns the three onboarding answers into a concrete path of units and lessons.
  *
  * Two things drive the shape of a plan:
- *   1. Available time sets how many lessons there are.
- *   2. The goal score sets which domains get the extra lessons — a student
- *      aiming at 1200 gains more from grammar and linear algebra, while one
- *      aiming at 1500 needs Craft & Structure and Advanced Math, where the
- *      hardest questions live.
+ *   1. Time available sets how many lessons there are — one a day, or two a day
+ *      at the most intensive setting.
+ *   2. The goal score sets which domains get the extra lessons: a student aiming
+ *      at 1200 gains more from grammar and linear algebra, while one aiming at
+ *      1500 needs Craft & Structure and Advanced Math, where the hardest
+ *      questions live.
  */
 
 export type Timeframe = '1-week' | '2-weeks' | '1-month' | '2-months' | '3-months'
 
-export const TIMEFRAMES: { id: Timeframe; label: string; weeks: number }[] = [
-  { id: '1-week', label: '1 week', weeks: 1 },
-  { id: '2-weeks', label: '2 weeks', weeks: 2 },
-  { id: '1-month', label: '1 month', weeks: 4 },
-  { id: '2-months', label: '2 months', weeks: 9 },
-  { id: '3-months', label: '3+ months', weeks: 13 },
+export const TIMEFRAMES: { id: Timeframe; label: string; days: number }[] = [
+  { id: '1-week', label: '1 week', days: 7 },
+  { id: '2-weeks', label: '2 weeks', days: 14 },
+  { id: '1-month', label: '1 month', days: 30 },
+  { id: '2-months', label: '2 months', days: 60 },
+  { id: '3-months', label: '3+ months', days: 90 },
 ]
 
 export const DAILY_GOALS = [
@@ -31,8 +33,10 @@ export const DAILY_GOALS = [
 
 /** 12 questions plus the recap runs a little over ten minutes in practice. */
 export const MINUTES_PER_LESSON = 11
-const ACTIVE_DAYS_PER_WEEK = 5
 export const LESSONS_PER_UNIT = 5
+
+/** Two lessons a day only at the most intensive setting; otherwise one. */
+const lessonsPerDay = (dailyMinutes: number): number => (dailyMinutes >= 20 ? 2 : 1)
 
 export interface PlanInput {
   name: string
@@ -69,6 +73,10 @@ export interface Plan {
   totalLessons: number
   estimatedMinutes: number
   allocation: Partial<Record<Domain, number>>
+  /** Lessons the timeframe asked for, before the bank's ceiling was applied. */
+  requestedLessons: number
+  /** True when the bank could not fill everything the timeframe asked for. */
+  cappedByBank: boolean
 }
 
 export const trackUnits = (plan: Plan, section: Section): PlannedUnit[] =>
@@ -98,52 +106,84 @@ const goalEmphasis = (goal: number): Partial<Record<Domain, number>> => {
   return {}
 }
 
+/**
+ * Lessons in a plan: one per day, or two a day at the most intensive setting.
+ * Sizing by the minutes budget instead used to produce a 12-lesson plan for a
+ * whole month, which is nowhere near a lesson a day.
+ */
 export const lessonCountFor = (timeframe: Timeframe, dailyMinutes: number): number => {
-  const weeks = TIMEFRAMES.find((t) => t.id === timeframe)!.weeks
-  const totalMinutes = weeks * ACTIVE_DAYS_PER_WEEK * dailyMinutes
-  const raw = Math.round(totalMinutes / MINUTES_PER_LESSON)
-  return Math.max(12, Math.min(90, raw))
+  const days = TIMEFRAMES.find((t) => t.id === timeframe)!.days
+  return days * lessonsPerDay(dailyMinutes)
 }
 
 /**
- * Split the lesson budget across the eight domains.
+ * Split one section's lesson budget across its four domains by blueprint weight,
+ * adjusted by goal emphasis. Every domain gets at least one lesson, and
+ * largest-remainder apportionment makes the counts sum exactly to the budget.
  *
- * The two sections are apportioned separately and get half the lessons each,
+ * The two sections are apportioned separately and get half the budget each,
  * because the real test weighs them equally. Doing it in one pass over all eight
- * domains lets rounding drift the split — with 27 lessons every remainder
- * happened to fall to Reading & Writing, giving 15/12. Goal emphasis still
- * applies, but within a section rather than across the whole plan.
+ * domains let rounding drift the split — with 27 lessons every remainder fell to
+ * Reading & Writing, producing 15/12.
  */
-const allocate = (totalLessons: number, goal: number): Record<Domain, number> => {
+const allocateSection = (budget: number, section: Section, goal: number): Record<Domain, number> => {
   const emphasis = goalEmphasis(goal)
+  const domains = DOMAINS.filter((d) => d.section === section)
   const alloc = {} as Record<Domain, number>
+  for (const d of domains) alloc[d.id] = 1
 
-  const perSection: Record<Section, number> = {
-    rw: Math.ceil(totalLessons / 2),
-    math: Math.floor(totalLessons / 2),
+  let remaining = budget - domains.length
+  const weights = domains.map((d) => ({ id: d.id, w: d.weight * (emphasis[d.id] ?? 1) }))
+  const totalW = weights.reduce((sum, x) => sum + x.w, 0)
+
+  const exact = weights.map((x) => ({ id: x.id, v: (x.w / totalW) * Math.max(0, remaining) }))
+  for (const e of exact) {
+    const floor = Math.floor(e.v)
+    alloc[e.id] += floor
+    remaining -= floor
   }
-
-  for (const section of ['rw', 'math'] as Section[]) {
-    const domains = DOMAINS.filter((d) => d.section === section)
-    for (const d of domains) alloc[d.id] = 1 // every domain gets at least one
-
-    let remaining = perSection[section] - domains.length
-    const weights = domains.map((d) => ({ id: d.id, w: d.weight * (emphasis[d.id] ?? 1) }))
-    const totalW = weights.reduce((sum, x) => sum + x.w, 0)
-
-    // Largest-remainder apportionment so the counts sum exactly to the budget.
-    const exact = weights.map((x) => ({ id: x.id, v: (x.w / totalW) * Math.max(0, remaining) }))
-    for (const e of exact) {
-      const floor = Math.floor(e.v)
-      alloc[e.id] += floor
-      remaining -= floor
-    }
-    const byFraction = [...exact].sort((a, b) => (b.v % 1) - (a.v % 1))
-    for (let i = 0; i < remaining; i++) alloc[byFraction[i % byFraction.length].id]++
-  }
+  const byFraction = [...exact].sort((a, b) => (b.v % 1) - (a.v % 1))
+  for (let i = 0; i < remaining; i++) alloc[byFraction[i % byFraction.length].id]++
 
   return alloc
 }
+
+/**
+ * How many lessons one trail can fill without repeating a question.
+ *
+ * Computed against the real allocator rather than raw blueprint weights, because
+ * a budget is apportioned with a one-lesson floor per domain and largest-
+ * remainder rounding — neither of which follows the blueprint exactly.
+ *
+ * The one-lesson reserve per domain absorbs the drift from unit reviews, which
+ * draw across every domain in their unit rather than from the single domain the
+ * allocation charges them to.
+ */
+export const trailCapacity = (section: Section, goal: number): number => {
+  const counts = questionCounts()
+  const domains = DOMAINS.filter((d) => d.section === section)
+  const fits = (budget: number): boolean => {
+    // Emphasis shifts the split, so capacity has to be computed for the goal
+    // actually in play — a 1600 target loads Craft and Advanced Math well above
+    // their blueprint share.
+    const alloc = allocateSection(budget, section, goal)
+    return domains.every((d) => (alloc[d.id] + 1) * QUESTIONS_PER_LESSON <= counts[d.id])
+  }
+  let best = domains.length
+  for (let b = domains.length; b <= 400; b++) {
+    if (!fits(b)) break
+    best = b
+  }
+  return best
+}
+
+/**
+ * Largest plan the bank can fill without repeating a question. The two trails
+ * cap independently, so a long plan can end up with more Math lessons than
+ * Reading & Writing ones — extra practice rather than recycled questions.
+ */
+export const planCeiling = (goal: number): number =>
+  trailCapacity('rw', goal) + trailCapacity('math', goal)
 
 /** The section's domains, most-emphasised first. */
 const sectionPool = (section: Section, goal: number): Domain[] => {
@@ -180,16 +220,8 @@ const orderByRotation = (counts: Partial<Record<Domain, number>>, pool: Domain[]
 }
 
 /** Order one section's lessons for the initial plan. */
-const sequenceSection = (
-  alloc: Record<Domain, number>,
-  section: Section,
-  goal: number,
-): Domain[] => {
-  const pool = sectionPool(section, goal)
-  const counts: Partial<Record<Domain, number>> = {}
-  for (const d of pool) counts[d] = alloc[d]
-  return orderByRotation(counts, pool)
-}
+const sequenceSection = (alloc: Record<Domain, number>, section: Section, goal: number): Domain[] =>
+  orderByRotation(alloc, sectionPool(section, goal))
 
 /** Each track gets its own palette so the two trails feel distinct. Gold is
  *  deliberately absent — white banner text on #FFC800 is unreadable. */
@@ -210,7 +242,6 @@ const buildTrack = (sequence: Domain[], section: Section): PlannedUnit[] => {
     const tally = new Map<Domain, number>()
     for (const d of slice) tally.set(d, (tally.get(d) ?? 0) + 1)
     const primaryDomain = [...tally.entries()].sort((a, b) => b[1] - a[1])[0][0]
-    const meta = DOMAIN_BY_ID[primaryDomain]
 
     const lessons: PlannedLesson[] = slice.map((d, i) => ({
       id: `${section}-u${unitIndex}-l${i}`,
@@ -230,7 +261,7 @@ const buildTrack = (sequence: Domain[], section: Section): PlannedUnit[] => {
     units.push({
       index: unitIndex,
       title: `Unit ${unitIndex + 1}`,
-      subtitle: meta.label,
+      subtitle: DOMAIN_BY_ID[primaryDomain].label,
       section,
       color: TRACK_COLORS[section][unitIndex % TRACK_COLORS[section].length],
       primaryDomain,
@@ -242,12 +273,20 @@ const buildTrack = (sequence: Domain[], section: Section): PlannedUnit[] => {
 }
 
 export const buildPlan = (input: PlanInput): Plan => {
-  const totalLessons = lessonCountFor(input.timeframe, input.dailyMinutes)
-  const allocation = allocate(totalLessons, input.goalScore)
+  const requestedLessons = lessonCountFor(input.timeframe, input.dailyMinutes)
 
-  // The split changes where lessons live, not how many there are.
-  const rw = buildTrack(sequenceSection(allocation, 'rw', input.goalScore), 'rw')
-  const math = buildTrack(sequenceSection(allocation, 'math', input.goalScore), 'math')
+  // The two sections are budgeted separately and equally, and each is capped at
+  // what its own bank can serve without repeating a question.
+  const budget: Record<Section, number> = {
+    rw: Math.min(Math.ceil(requestedLessons / 2), trailCapacity('rw', input.goalScore)),
+    math: Math.min(Math.floor(requestedLessons / 2), trailCapacity('math', input.goalScore)),
+  }
+
+  const rwAlloc = allocateSection(budget.rw, 'rw', input.goalScore)
+  const mathAlloc = allocateSection(budget.math, 'math', input.goalScore)
+
+  const rw = buildTrack(sequenceSection(rwAlloc, 'rw', input.goalScore), 'rw')
+  const math = buildTrack(sequenceSection(mathAlloc, 'math', input.goalScore), 'math')
   const count = rw.concat(math).reduce((sum, u) => sum + u.lessons.length, 0)
 
   return {
@@ -255,15 +294,20 @@ export const buildPlan = (input: PlanInput): Plan => {
     math,
     totalLessons: count,
     estimatedMinutes: count * MINUTES_PER_LESSON,
-    allocation,
+    allocation: { ...rwAlloc, ...mathAlloc },
+    requestedLessons,
+    cappedByBank: count < requestedLessons,
   }
 }
+
+/** Questions a plan will serve in total. */
+export const planQuestionCount = (plan: Plan): number => plan.totalLessons * QUESTIONS_PER_LESSON
 
 /**
  * Pick which domains `count` extra lessons should cover.
  *
  * Rather than plain round-robin, each new lesson goes to whichever domain is
- * furthest below its blueprint share of the trail so far. That keeps a trail
+ * furthest below its blueprint share of the trail so far, which keeps a trail
  * proportionally correct however many times it is extended.
  */
 const deficitAllocation = (
@@ -301,9 +345,9 @@ const deficitAllocation = (
 }
 
 /**
- * Append lessons to one trail, filling any partial final unit before starting a
- * new one. A unit that reaches five lessons gains a review as its last step,
- * matching how the initial plan is built.
+ * Append lessons to one trail, filling any partial final unit before opening a
+ * new one. A unit reaching five lessons gains a review as its last step, the
+ * same rule the initial build follows.
  */
 const extendTrack = (
   units: PlannedUnit[],
@@ -353,7 +397,8 @@ const extendTrack = (
 
     // Keep each unit labelled by whatever domain dominates it.
     const tally = new Map<Domain, number>()
-    for (const l of unit.lessons) if (l.kind === 'lesson') tally.set(l.domains[0], (tally.get(l.domains[0]) ?? 0) + 1)
+    for (const l of unit.lessons)
+      if (l.kind === 'lesson') tally.set(l.domains[0], (tally.get(l.domains[0]) ?? 0) + 1)
     if (tally.size) {
       const primary = [...tally.entries()].sort((a, b) => b[1] - a[1])[0][0]
       unit.primaryDomain = primary
@@ -364,15 +409,11 @@ const extendTrack = (
   return next
 }
 
-/** Largest number of lessons a plan may hold, however often it is extended. */
+/** Hard ceiling on plan size, however many times a plan is extended. */
 export const MAX_PLAN_LESSONS = 250
 
 /** Add lessons to either trail. Returns a new plan; the input is untouched. */
-export const extendPlan = (
-  plan: Plan,
-  add: { rw: number; math: number },
-  goal: number,
-): Plan => {
+export const extendPlan = (plan: Plan, add: { rw: number; math: number }, goal: number): Plan => {
   const room = Math.max(0, MAX_PLAN_LESSONS - plan.totalLessons)
   const rwAdd = Math.max(0, Math.min(add.rw, room))
   const mathAdd = Math.max(0, Math.min(add.math, room - rwAdd))

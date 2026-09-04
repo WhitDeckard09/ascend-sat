@@ -2,6 +2,9 @@
 
 export type Section = 'rw' | 'math'
 
+/** Questions in one lesson: two adaptive modules of six. */
+export const QUESTIONS_PER_LESSON = 12
+
 export type Domain =
   // Reading & Writing
   | 'information-ideas'

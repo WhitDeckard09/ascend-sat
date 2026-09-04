@@ -1,4 +1,5 @@
 import type { Difficulty, Domain, Question } from '../data/types'
+import { QUESTIONS_PER_LESSON } from '../data/types'
 import { byDomainDifficulty } from '../data/bank'
 
 /**
@@ -11,8 +12,8 @@ import { byDomainDifficulty } from '../data/bank'
  *    which point the least-recently-seen come back.
  */
 
-export const HALF_MODULE = 6
-export const QUESTIONS_PER_LESSON = HALF_MODULE * 2
+export const HALF_MODULE = QUESTIONS_PER_LESSON / 2
+export { QUESTIONS_PER_LESSON }
 
 /** Difficulty mix for each tier. Tier 2 is the broad mix the real Module 1 uses. */
 const MIX: Record<Difficulty, Difficulty[]> = {
@@ -55,36 +56,47 @@ export const selectHalf = (
     const domain = domains[slot % domains.length]
     const wanted = pattern[slot]
 
-    // Try the exact difficulty first, then adjacent bands, so a thin pool in one
-    // domain degrades gracefully instead of failing.
+    // Difficulties to try, nearest first, so a thin pool degrades to an adjacent
+    // band rather than failing.
     const ladder: Difficulty[] = wanted === 1 ? [1, 2, 3] : wanted === 3 ? [3, 2, 1] : [2, 1, 3]
 
+    const draw = (pool: Question[]): Question | undefined => {
+      if (!pool.length) return undefined
+      const allowed = sprCount >= MAX_SPR_PER_HALF ? pool.filter((q) => q.type !== 'spr') : pool
+      return shuffle(allowed.length ? allowed : pool)[0]
+    }
+
     let choice: Question | undefined
+
+    // Pass one: an unseen question. Exhaust every difficulty and both domain
+    // preferences before settling for a repeat — taking an unseen question one
+    // band away is far better practice than re-serving a seen one at the exact
+    // difficulty, and skipping this pass burned through the hard questions long
+    // before the rest of the bank had been touched.
     for (const d of ladder) {
-      // Widen across all this lesson's domains if one domain is exhausted.
-      const pool = domains
-        .flatMap((dom) => byDomainDifficulty(dom, d))
-        .filter((q) => !used.has(q.id))
-      if (!pool.length) continue
-
-      const sprBlocked = sprCount >= MAX_SPR_PER_HALF
-      const allowed = sprBlocked ? pool.filter((q) => q.type !== 'spr') : pool
-      const finalPool = allowed.length ? allowed : pool
-
-      // Prefer this slot's own domain when it has anything left.
-      const onDomain = finalPool.filter((q) => q.domain === domain)
-      const candidates = onDomain.length ? onDomain : finalPool
-
-      const unseen = candidates.filter((q) => !seenRank.has(q.id))
-      if (unseen.length) {
-        choice = shuffle(unseen)[0]
-      } else {
-        // Everything has been seen: take whatever was seen longest ago.
-        choice = [...candidates].sort(
-          (a, b) => (seenRank.get(a.id) ?? -1) - (seenRank.get(b.id) ?? -1),
-        )[0]
+      for (const pools of [[domain], domains]) {
+        const pool = pools
+          .flatMap((dom) => byDomainDifficulty(dom, d))
+          .filter((q) => !used.has(q.id) && !seenRank.has(q.id))
+        choice = draw(pool)
+        if (choice) break
       }
       if (choice) break
+    }
+
+    // Pass two: everything in reach has been seen, so take whichever was seen
+    // longest ago, still preferring the intended difficulty.
+    if (!choice) {
+      for (const d of ladder) {
+        const pool = domains
+          .flatMap((dom) => byDomainDifficulty(dom, d))
+          .filter((q) => !used.has(q.id))
+        if (!pool.length) continue
+        const allowed = sprCount >= MAX_SPR_PER_HALF ? pool.filter((q) => q.type !== 'spr') : pool
+        const from = allowed.length ? allowed : pool
+        choice = [...from].sort((a, b) => (seenRank.get(a.id) ?? -1) - (seenRank.get(b.id) ?? -1))[0]
+        break
+      }
     }
 
     if (!choice) continue
