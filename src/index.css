@@ -40,21 +40,42 @@
 @layer base {
   * { -webkit-tap-highlight-color: transparent; }
 
-  html, body, #root { height: 100%; }
+  html { height: 100%; }
 
   body {
     margin: 0;
+    /* 100% resolves against the LARGE viewport on mobile — the height with the
+       URL bar hidden — so the page ends up taller than what is actually visible
+       and rubber-bands even when nothing overflows. dvh tracks the visible area
+       as the browser chrome shows and hides. */
+    height: 100vh;
+    height: 100dvh;
+    /* The app shell manages its own scrolling; the page itself never scrolls. */
+    overflow: hidden;
+    overscroll-behavior: none;
     font-family: var(--font-display);
     font-weight: 700;
     color: var(--color-eel);
-    background: #d9d9d9;
-    overscroll-behavior: none;
+    /* iOS Safari tints its top chrome with the page background, so this has to
+       be white or a grey bar appears above the app. The desktop letterbox grey
+       lives on the shell element instead. */
+    background: #fff;
   }
+
+  #root { height: 100%; }
 
   button { font-family: inherit; font-weight: 800; cursor: pointer; }
 
-  /* Hide scrollbars but keep scrolling */
-  .no-bar { scrollbar-width: none; -ms-overflow-style: none; }
+  /* Scroll containers: no visible scrollbar, and no bounce chaining to the page
+     when the content already fits. */
+  .no-bar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    overscroll-behavior: contain;
+    /* A flex child will not shrink below its content without this, which is what
+       lets a short screen overflow when it should not. */
+    min-height: 0;
+  }
   .no-bar::-webkit-scrollbar { display: none; }
 }
 

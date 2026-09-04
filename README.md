@@ -146,6 +146,75 @@ Duolingo's exact hex values.
 
 ## Icon and mascot
 
+**Ace**, the pencil, is both the in-app mascot and the app icon. He is inline SVG
+in `src/components/Mascot.tsx` with five expressions, and the icon files are
+generated from the same drawing: `apple-touch-icon.png` (180px, fully opaque —
+iOS paints black behind any transparency), `icon-192/512.png` for the web
+manifest, and a 32px favicon.
+
+The maskable icon keeps him inside the central 80% safe circle so Android's crop
+can't clip him; the tab favicon uses a tighter crop, since 16px leaves no room
+for margins.
+
+## Layout and viewport
+
+The app shell is the only thing that scrolls. `body` is `100dvh` with
+`overflow: hidden`, because `height: 100%` resolves against the *large* viewport
+on mobile — the height with the URL bar hidden — which leaves the page taller
+than the visible area and rubber-banding even where nothing overflows. Scroll
+containers use `overscroll-behavior: contain` and `min-height: 0`, the latter
+because a flex child will not shrink below its content without it.
+
+`body` is white rather than the desktop letterbox grey: iOS Safari tints its top
+chrome with the page background, so a grey body paints a grey bar above the app.
+The letterbox grey lives on the shell element, where only a wide screen sees it.
+
+## The two trails
+
+A segmented toggle at the top of the Learn tab switches between them — book for
+Reading & Writing, radical for Math — and shows how far along each one you are.
+The choice persists across reloads. Each trail has its own palette (blue/purple
+for R&W, green/orange for Math) so the two feel distinct, and lesson ids are
+namespaced per trail (`rw-u0-l0`, `math-u0-l0`) so completion never collides.
+
+Gold is deliberately absent from unit banners: white text on `#FFC800` is
+unreadable.
+
+## Adding more lessons
+
+**Settings → Add more lessons** has a stepper per trail: pick how many Reading &
+Writing and how many Math lessons to append, up to 20 of each at a time and 250
+in the plan overall.
+
+New lessons fill any partial final unit before opening a new one, and a unit that
+reaches five gains a review as its last step — the same rule the initial build
+follows. Which domains they cover is decided by *deficit*: each new lesson goes to
+whichever domain is furthest below its blueprint share of that trail so far, so a
+trail stays proportionally correct no matter how many times it is extended.
+
+Extending never renumbers or reorders an existing lesson, because completion is
+keyed by lesson id — `tests/extend.test.mjs` asserts that explicitly, along with
+id uniqueness, the unit-filling rules, and that the input plan is not mutated.
+
+## Onboarding
+
+Three questions: name, how long you have, and a goal score set with a slider —
+1000 to 1600 in steps of 50. It's a native `<input type="range">` under the
+chunky styling, so arrow keys, touch drag, and screen readers all work; the value
+snaps to the step and clamps at both ends.
+
+## On the Duolingo resemblance
+
+Game mechanics — streaks, XP, hearts, a node path, unit banners — aren't
+protectable, and copying them is fine. What *is* protected is the specific trade
+dress: Duo the owl, the Feather Bold typeface, the logo. So the mascot here is
+**Ace**, a pencil, drawn from scratch as inline SVG, and the typeface is Nunito
+(open source, and the closest free relative of Feather). The palette is built
+around the same chunky, saturated, hard-bottom-edge language without lifting
+Duolingo's exact hex values.
+
+## Icon and mascot
+
 Two different marks, doing two different jobs.
 
 **Ace**, the pencil, is the in-app mascot — he appears in onboarding, on the

@@ -77,7 +77,7 @@ export const Onboarding = () => {
 
   return (
     <div className="flex h-full flex-col bg-white">
-      <div className="flex items-center gap-3 px-5 pb-2 pt-5">
+      <div className="flex shrink-0 items-center gap-3 px-5 pb-2 pt-[calc(1.25rem+env(safe-area-inset-top))]">
         {step > 0 && (
           <button
             onClick={() => setStep(step - 1)}
@@ -217,7 +217,7 @@ export const Onboarding = () => {
         )}
       </div>
 
-      <div className="border-t-2 border-swan px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-4">
+      <div className="shrink-0 border-t-2 border-swan px-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] pt-4">
         <Btn full disabled={!canAdvance} onClick={next}>
           {step === TOTAL - 1 ? "Let's go" : 'Continue'}
         </Btn>
