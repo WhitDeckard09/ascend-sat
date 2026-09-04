@@ -19,6 +19,7 @@ interface Finished {
   log: AnswerLog[]
   xp: number
   routedUp: boolean
+  elapsedMs: number
 }
 
 const TABS: { id: Tab; label: string; icon: typeof Star }[] = [
@@ -87,6 +88,7 @@ export const App = () => {
         log={finished.log}
         xp={finished.xp}
         routedUp={finished.routedUp}
+        elapsedMs={finished.elapsedMs}
         onDone={() => {
           setFinished(null)
           setLesson(null)
@@ -101,7 +103,7 @@ export const App = () => {
         key={lesson.id}
         lesson={lesson}
         onQuit={() => setLesson(null)}
-        onFinish={({ log, xp, routedUp }) => setFinished({ log, xp, routedUp })}
+        onFinish={({ log, xp, routedUp, elapsedMs }) => setFinished({ log, xp, routedUp, elapsedMs })}
       />
     )
   }

@@ -1,9 +1,10 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Difficulty, Question } from '../data/types'
 import { DOMAIN_BY_ID } from '../data/types'
 import type { PlannedLesson } from '../engine/planner'
 import { HALF_MODULE, routeTier, selectHalf } from '../engine/selection'
 import { correctAnswerText, isCorrect } from '../engine/answers'
+import { makeLessonClock } from '../engine/pace'
 import { tierForRating, updateRating } from '../engine/rating'
 import type { Ratings } from '../engine/rating'
 import { Bar, Btn, Sheet } from '../components/ui'
@@ -20,6 +21,8 @@ export interface AnswerLog {
   question: Question
   response: number | string | null
   correct: boolean
+  /** Time this question was on screen, in ms. See `engine/pace`. */
+  ms: number
 }
 
 export const Lesson = ({
@@ -29,7 +32,13 @@ export const Lesson = ({
 }: {
   lesson: PlannedLesson
   onQuit: () => void
-  onFinish: (result: { log: AnswerLog[]; routedUp: boolean; xp: number; lessonId: string }) => void
+  onFinish: (result: {
+    log: AnswerLog[]
+    routedUp: boolean
+    xp: number
+    lessonId: string
+    elapsedMs: number
+  }) => void
 }) => {
   const app = useApp()
 
@@ -61,6 +70,32 @@ export const Lesson = ({
   // the lesson is committed, so quitting midway doesn't half-apply a lesson.
   const workingRatings = useRef<Ratings>({ ...app.ratings })
 
+  // The lesson clock. Deliberately invisible: nothing here renders, and the
+  // total only surfaces on the recap. It accumulates while a question is on
+  // screen and stops at Check, so reading an explanation is never charged to
+  // your pace, and it stops while the tab is hidden so a lesson abandoned on a
+  // locked phone doesn't come back reporting eight hours.
+  const clock = useRef(makeLessonClock()).current
+
+  // A question is on screen exactly when the phase is 'question'; a new index or
+  // half is a new question, and `take()` at Check resets the accumulator.
+  useEffect(() => {
+    if (phase !== 'question') return
+    clock.start()
+    return clock.stop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, half, idx])
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.hidden) clock.stop()
+      else if (phase === 'question') clock.start()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => document.removeEventListener('visibilitychange', onVisibility)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase])
+
   const questions = half === 0 ? firstHalf : (secondHalf ?? [])
   const q = questions[idx] as Question | undefined
   const total = HALF_MODULE * 2
@@ -74,11 +109,13 @@ export const Lesson = ({
     const response = q.type === 'mc' ? choice : typed
     const ok = isCorrect(q, response)
 
+    const ms = clock.take()
+
     workingRatings.current = {
       ...workingRatings.current,
       [q.domain]: updateRating(workingRatings.current[q.domain], q.difficulty, ok),
     }
-    setLog((l) => [...l, { question: q, response, correct: ok }])
+    setLog((l) => [...l, { question: q, response, correct: ok, ms }])
     if (!ok) loseHeart()
     if (app.soundOn) (ok ? playCorrect : playWrong)()
     setPhase('feedback')
@@ -124,6 +161,7 @@ export const Lesson = ({
     const correct = log.filter((a) => a.correct).length
     const perfect = correct === total
     const xp = 10 + (perfect ? 5 : 0) + (routeDirection === 'up' ? 3 : 0)
+    const elapsedMs = log.reduce((sum, a) => sum + a.ms, 0)
 
     const result: LessonResult = {
       lessonId: lesson.id,
@@ -133,12 +171,14 @@ export const Lesson = ({
         difficulty: a.question.difficulty,
         correct: a.correct,
         response: a.response,
+        ms: a.ms,
       })),
       ratingsAfter: workingRatings.current,
       xpEarned: xp,
+      durationMs: elapsedMs,
     }
     commitLesson(result)
-    onFinish({ log, routedUp: routeDirection === 'up', xp, lessonId: lesson.id })
+    onFinish({ log, routedUp: routeDirection === 'up', xp, lessonId: lesson.id, elapsedMs })
   }
 
   // ------------------------------------------------------------ interstitials

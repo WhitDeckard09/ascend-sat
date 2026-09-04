@@ -16,7 +16,7 @@ browser, saves to `localStorage`, no account, no server.
 ```bash
 npm install
 npm run dev      # http://localhost:5180
-npm test         # bank, planner, extend, grading, streak
+npm test         # bank, planner, extend, grading, streak, pace, commit
 npm run build
 ```
 
@@ -87,6 +87,21 @@ hand-plotted, because a 5-point star's box is not symmetric about its centroid.
 The path's current-node halo carries the same 6px bottom edge as the button it
 surrounds, so the two 3D discs stay concentric; a flat ring sits visibly high
 against a button that has a drop edge.
+
+**`src/engine/pace.ts` — the lesson clock.** Every lesson is timed, but nothing
+about it appears while you work: no counter, no ticking bar, nothing to make a
+hard question feel worse than it already does. The total lands on the recap.
+
+What it measures is time *on questions* — the clock runs while a question is on
+screen and stops the instant you hit Check, so reading an explanation is never
+charged to your pace. It also stops while the tab is hidden, because a lesson
+left open on a locked phone would otherwise report eight hours.
+
+The number is compared against the real test's own budget, built from the
+sections you actually answered: Reading & Writing allows 64 minutes for 54
+questions, Math 70 for 44, so a twelve-question lesson is due 14:13 or 19:05
+depending on the trail. Anything inside 10% reads as on pace. When a previous
+lesson exists, the recap also says how much your per-question pace moved.
 
 **`src/engine/streak.ts` — streaks.** Consecutive days, freezes earned every 5th
 day that forgive one missed day. Pure functions, so the date edge cases (DST, new
@@ -232,11 +247,11 @@ src/
   data/         types.ts (SAT taxonomy) · bank.ts (index)
                 questions/  hand-written items
                 generate/   parameterised math templates
-  engine/       planner · rating · selection · answers (grading) · streak · sound
+  engine/       planner · rating · selection · answers (grading) · streak · pace · sound
   store/        store.ts — state, localStorage, hearts, XP
   screens/      Onboarding · Path · Lesson · Recap · Stats · Review · Settings
   components/   Mascot · TopBar · QuestionBody · ui · icons
-tests/          bank · planner · norepeat · extend · grading · streak
+tests/          bank · planner · norepeat · extend · grading · streak · pace · commit
 ```
 
 ## Known limits

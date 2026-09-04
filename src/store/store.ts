@@ -14,6 +14,15 @@ const STORAGE_KEY = 'ascend-sat-v1'
 export const MAX_HEARTS = 5
 export const HEART_REFILL_MS = 30 * 60 * 1000
 
+/** How long one committed lesson took, so pace can be compared over time. */
+export interface LessonTime {
+  lessonId: string
+  /** Time on questions, in ms. Reading the explanations is not counted. */
+  ms: number
+  questions: number
+  at: number
+}
+
 export interface MissedRecord {
   questionId: string
   response: number | string | null
@@ -37,6 +46,8 @@ export interface AppState {
   seen: string[]
   missed: MissedRecord[]
   completedLessons: string[]
+  /** Newest first. Written by `commitLesson`, read by the recap. */
+  lessonTimes: LessonTime[]
   xp: number
   streak: number
   bestStreak: number
@@ -59,6 +70,7 @@ const emptyState = (): AppState => ({
   seen: [],
   missed: [],
   completedLessons: [],
+  lessonTimes: [],
   xp: 0,
   streak: 0,
   bestStreak: 0,
@@ -219,9 +231,13 @@ export interface LessonResult {
     difficulty: 1 | 2 | 3
     correct: boolean
     response: number | string | null
+    /** Time this question was on screen, in ms. */
+    ms: number
   }[]
   ratingsAfter: Ratings
   xpEarned: number
+  /** Sum of the per-question times — the lesson's pace, not its wall clock. */
+  durationMs: number
 }
 
 export const commitLesson = (result: LessonResult) => {
@@ -238,6 +254,12 @@ export const commitLesson = (result: LessonResult) => {
         at: Date.now(),
       }))
 
+    // Only the streak fields, never the whole object. `advanceStreak` returns
+    // its argument unchanged when today has already counted, and `s` here is the
+    // entire AppState — spreading that back over this patch silently reverted
+    // every second lesson of the day.
+    const { streak, bestStreak, freezes, lastActiveDay, daysActive } = advanceStreak(s)
+
     // Keep the seen list bounded; it only exists to avoid repeats.
     const seen = [...s.seen.filter((id) => !result.answers.some((a) => a.questionId === id)),
       ...result.answers.map((a) => a.questionId)].slice(-600)
@@ -250,8 +272,21 @@ export const commitLesson = (result: LessonResult) => {
       completedLessons: s.completedLessons.includes(result.lessonId)
         ? s.completedLessons
         : [...s.completedLessons, result.lessonId],
+      lessonTimes: [
+        {
+          lessonId: result.lessonId,
+          ms: result.durationMs,
+          questions: result.answers.length,
+          at: Date.now(),
+        },
+        ...s.lessonTimes,
+      ].slice(0, 200),
       xp: s.xp + result.xpEarned,
-      ...advanceStreak(s),
+      streak,
+      bestStreak,
+      freezes,
+      lastActiveDay,
+      daysActive,
     }
   })
 }

@@ -3,7 +3,8 @@ import { DOMAIN_BY_ID, SKILL_LABEL } from '../data/types'
 import type { Domain } from '../data/types'
 import { correctAnswerText } from '../engine/answers'
 import { projectScore } from '../engine/rating'
-import { Bolt, Check, Cross, Star, Target } from '../components/icons'
+import { budgetMs, comparePace, formatDuration, formatPace } from '../engine/pace'
+import { Bolt, Check, Clock, Cross, Star, Target } from '../components/icons'
 import { Mascot } from '../components/Mascot'
 import { Btn } from '../components/ui'
 import { QuestionBody } from '../components/QuestionBody'
@@ -111,11 +112,14 @@ export const Recap = ({
   log,
   xp,
   routedUp,
+  elapsedMs,
   onDone,
 }: {
   log: AnswerLog[]
   xp: number
   routedUp: boolean
+  /** Time on questions. The clock ran during the lesson without showing itself. */
+  elapsedMs: number
   onDone: () => void
 }) => {
   const app = useApp()
@@ -123,6 +127,23 @@ export const Recap = ({
   const accuracy = log.length ? Math.round((correct / log.length) * 100) : 0
   const misses = log.filter((a) => !a.correct)
   const projected = projectScore(app.ratings, app.profile?.goalScore ?? 1300, app.answeredByDomain)
+
+  // Pace. The budget is built from the sections actually answered, since Math
+  // gets about 24 more seconds a question than Reading & Writing.
+  const perQuestion = log.length ? elapsedMs / log.length : 0
+  const pace = comparePace(elapsedMs, budgetMs(log.map((a) => a.question.section)))
+  const paceColor =
+    pace.label === 'ahead' ? '#3f8c00' : pace.label === 'on' ? 'var(--color-macaw)' : 'var(--color-fox)'
+
+  // `lessonTimes[0]` is the lesson that just committed, so the one before it is
+  // the comparison. A couple of seconds either way is noise, not a trend.
+  const previous = app.lessonTimes[1]
+  const priorPerQuestion = previous?.questions ? previous.ms / previous.questions : null
+  const swing = priorPerQuestion === null ? 0 : priorPerQuestion - perQuestion
+  const swingLine =
+    Math.abs(swing) < 2000
+      ? null
+      : ` ${formatPace(Math.abs(swing))} ${swing > 0 ? 'faster' : 'slower'} a question than last lesson.`
 
   /** Rank the skills touched by this lesson by how badly they went. */
   const focus = useMemo(() => {
@@ -175,7 +196,31 @@ export const Recap = ({
           />
         </div>
 
-        <div className="mt-4 flex items-center gap-3 rounded-2xl border-2 border-swan bg-polar p-3">
+        {elapsedMs > 0 && (
+          <div className="mt-3 flex items-center gap-3 rounded-2xl border-2 border-swan bg-polar p-3">
+            <span
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-white"
+              style={{ background: paceColor }}
+            >
+              <Clock size={18} />
+            </span>
+            <p className="text-[14px] font-bold leading-snug text-wolf">
+              Finished in <b className="text-[15px] text-eel">{formatDuration(elapsedMs)}</b>{' '}
+              <span className="text-hare">· {formatPace(perQuestion)} a question</span>
+              <br />
+              <span style={{ color: paceColor }}>
+                {pace.label === 'on'
+                  ? `Right on the real test's pace for these ${log.length}.`
+                  : pace.label === 'ahead'
+                    ? `${formatDuration(pace.spareMs)} inside the real test's clock for these ${log.length}.`
+                    : `${formatDuration(-pace.spareMs)} over the real test's clock for these ${log.length}.`}
+              </span>
+              {swingLine && <span className="text-hare">{swingLine}</span>}
+            </p>
+          </div>
+        )}
+
+        <div className="mt-3 flex items-center gap-3 rounded-2xl border-2 border-swan bg-polar p-3">
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-macaw text-white">
             <Target size={18} />
           </span>

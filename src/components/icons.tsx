@@ -106,3 +106,17 @@ export const Trophy = ({ size = 22, className = '' }: P) => (
     <path d="M10 13h4v3.5h3V21H7v-4.5h3V13Z" fill="currentColor" />
   </svg>
 )
+
+export const Clock = ({ size = 22, className = '' }: P) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" className={className} aria-hidden>
+    <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2.5" />
+    <path
+      d="M12 6.9v5.4l3.5 2"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+)
