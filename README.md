@@ -1,5 +1,12 @@
 # Ascend — a Duolingo-shaped SAT tutor
 
+**Live: https://whitdeckard09.github.io/ascend-sat/**
+
+On iPhone, open that link in Safari and tap **Share → Add to Home Screen**. It
+launches fullscreen with no browser chrome and its own icon, like a native app.
+Progress is stored in your browser, so each device keeps its own streak.
+
+
 A gamified SAT study app. You tell it how long you have, what score you want, and
 your name; it generates two lesson trails — Reading & Writing and Math — and
 walks you down whichever one you pick. Every lesson is 12 questions split into two
@@ -9,9 +16,13 @@ browser, saves to `localStorage`, no account, no server.
 ```bash
 npm install
 npm run dev      # http://localhost:5180
-npm test         # bank validation + grading + streak logic
+npm test         # bank, planner, extend, grading, streak
 npm run build
 ```
+
+Pushing to `main` runs the tests and redeploys via GitHub Actions
+(`.github/workflows/deploy.yml`). The site is served from `/ascend-sat/`, which
+is why `vite.config.ts` sets `base` — change it if the repo is ever renamed.
 
 On your phone: open the dev URL on the same Wi-Fi (or `npm run build && npm run
 preview`), then **Share → Add to Home Screen**. It launches fullscreen with no
@@ -132,6 +143,14 @@ dress: Duo the owl, the Feather Bold typeface, the logo. So the mascot here is
 (open source, and the closest free relative of Feather). The palette is built
 around the same chunky, saturated, hard-bottom-edge language without lifting
 Duolingo's exact hex values.
+
+## Icons
+
+Ace is drawn as inline SVG and rasterised to PNG for the places that need it:
+`apple-touch-icon.png` (180px, opaque — iOS paints black behind transparency),
+`icon-192/512.png` for the web manifest, and a 32px favicon. The maskable icon
+keeps him inside the central 80% safe circle so Android's crop never clips him;
+the tab favicon uses a tighter crop, since 16px leaves no room for margins.
 
 ## Structure
 
